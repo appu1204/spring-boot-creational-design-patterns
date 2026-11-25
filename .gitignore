@@ -1,0 +1,30 @@
+# Build outputs
+target/
+build/
+out/
+
+# Maven wrapper jar (downloaded automatically by mvnw)
+.mvn/wrapper/maven-wrapper.jar
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# VS Code
+.vscode/
+
+# Eclipse / STS
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# OS & Logs
+.DS_Store
+Thumbs.db
+*.log
