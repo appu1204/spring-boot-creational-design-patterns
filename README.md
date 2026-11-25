@@ -13,6 +13,9 @@ A beginner-friendly, runnable collection of **Creational Design Patterns impleme
 - [1. Singleton Pattern (`payment-singleton-demo`)](#1-singleton-pattern-payment-singleton-demo)
   - [How to Run](#how-to-run)
   - [API Endpoints & Expected Output](#api-endpoints--expected-output)
+- [2. Factory Method Pattern (`payment-service`)](#2-factory-method-pattern-payment-service)
+  - [How to Run](#how-to-run-1)
+  - [API Endpoints & Expected Output](#api-endpoints--expected-output-1)
 - [Handwritten & Study Notes](#handwritten--study-notes)
 - [Contributing & Roadmap](#contributing--roadmap)
 
@@ -26,6 +29,8 @@ Each design pattern lives in its own standalone Spring Boot application folder s
 spring-boot-creational-design-patterns/
 ├── singleton-pattern/
 │   └── payment-singleton-demo/     # Java 21 + Spring Boot 4.2.0 (Naive vs. DCL vs. Bill Pugh Singleton)
+├── factory-method-pattern/
+│   └── payment-service/            # Java 21 + Spring Boot 4.2.0 (Naive tight coupling vs. Factory + @Lazy)
 ├── notes/                          # (Coming soon) Handwritten & study notes
 ├── .gitignore
 └── README.md
@@ -40,7 +45,7 @@ Creational patterns abstract the **object creation process** so your Spring Boot
 | Pattern | Core Intent | When to Use in Spring Boot | Key Difference | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **Singleton** | Ensure a class has **only one shared instance** with a global access point | Expensive shared resources (e.g., connection clients, caches, config registries); also Spring's default `@Bean` scope | Focuses on **single instance reuse** across threads | ✅ [Implemented](./singleton-pattern/payment-singleton-demo) |
-| **Factory Method** | Define an interface for creating an object, letting **subclasses/implementations decide** which class to instantiate | Selecting a single service implementation dynamically (e.g., Stripe vs. PayPal payment processor, Email vs. SMS notifier) | Creates **one product** via a factory method / Spring map lookup | 🚧 Planned |
+| **Factory Method** | Define an interface for creating an object, letting **subclasses/implementations decide** which class to instantiate | Selecting a single service implementation dynamically (e.g., Stripe vs. PayPal payment processor, Email vs. SMS notifier) | Creates **one product** via a factory method / Spring bean lookup | ✅ [Implemented](./factory-method-pattern/payment-service) |
 | **Abstract Factory** | Create **families of related or dependent objects** without specifying concrete classes | Multi-provider or multi-theme setups (e.g., AWS vs. GCP storage + queue + secret clients) | Creates **a suite of related products** that must work together | 🚧 Planned |
 | **Builder** | Construct **complex objects step by step**, separating construction from representation | Requests/DTOs/configs with many optional fields (e.g., complex order, report, or HTTP client configuration) | Focuses on **step-by-step assembly** of one complex object | 🚧 Planned |
 | **Prototype** | Create new objects by **cloning an existing instance** rather than constructing from scratch | Expensive initialization where new independent copies are needed per request (e.g., document templates, rule snapshots) | Creates **copies of a pre-built object** (`@Scope("prototype")` or `.clone()`) | 🚧 Planned |
@@ -163,6 +168,99 @@ curl -X POST "http://localhost:8080/api/payments/simulate-load?mode=billpugh&cou
 
 ---
 
+## 2. Factory Method Pattern (`payment-service`)
+
+Located in [`factory-method-pattern/payment-service`](./factory-method-pattern/payment-service), this Spring Boot application demonstrates why **decoupling object creation with a Factory** matters when multiple payment gateways exist (`STRIPE`, `PAYPAL`, `CRYPTO`):
+
+1. **Naive Controller (`NaivePaymentController`)** — Uses `if/else` and **eagerly instantiates** `new StripeProcessor()`, `new PayPalProcessor()`, and `new CryptoProcessor()` on every request. Because `CryptoProcessor` simulates an offline blockchain node (`RuntimeException` in its constructor), **even `STRIPE` and `PAYPAL` requests fail!**
+2. **Factory Pattern (`PaymentProcessorFactory` + `@Lazy`)** — Defines a common `PaymentProcessor` interface implemented by `@Component("STRIPE")`, `@Component("PAYPAL")`, and `@Component("CRYPTO") @Lazy`. `PaymentProcessorFactory` resolves only the requested bean from Spring's `ApplicationContext`, isolating failures so `STRIPE` and `PAYPAL` work normally even when `CRYPTO` is offline.
+
+### How to Run
+
+From the repository root:
+
+```bash
+cd factory-method-pattern/payment-service
+```
+
+**On Linux / macOS:**
+```bash
+./mvnw spring-boot:run
+```
+
+**On Windows (PowerShell / CMD):**
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+The application starts on `http://localhost:8080`. *(Stop the singleton demo first if it is already using port `8080`.)*
+
+### API Endpoints & Expected Output
+
+#### 1. Naive Endpoint (Tight Coupling & Eager Instantiation)
+**Endpoint:** `POST /api/payments/naive/pay-now`
+
+```bash
+curl -X POST "http://localhost:8080/api/payments/naive/pay-now" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "ORD-101",
+    "amount": 150.0,
+    "currency": "USD",
+    "paymentMethod": "STRIPE",
+    "customerEmail": "buyer@example.com"
+  }'
+```
+
+**Expected Result:** Fails with HTTP `500 Internal Server Error` (`CRITICAL: Blockchain node connection refused! Crypto gateway offline.`) because `NaivePaymentController` eagerly calls `new CryptoProcessor()` even though the user selected `STRIPE`.
+
+#### 2. Factory Endpoint (Decoupled & Fault-Isolated)
+**Endpoint:** `POST /api/payments/pay-now`
+
+**Example A — `STRIPE` or `PAYPAL` succeeds (`200 OK`):**
+```bash
+curl -X POST "http://localhost:8080/api/payments/pay-now" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "ORD-101",
+    "amount": 150.0,
+    "currency": "USD",
+    "paymentMethod": "STRIPE",
+    "customerEmail": "buyer@example.com"
+  }'
+```
+
+```json
+{
+  "status": "SUCCESS",
+  "transactionId": "ch_stripe_a1b2c3d4e5",
+  "amount": 150.0,
+  "currency": "USD",
+  "paymentMethod": "STRIPE",
+  "message": "Card charged successfully via Stripe Gateway",
+  "timestamp": "2026-11-25T12:00:00.000Z"
+}
+```
+
+**Example B — `CRYPTO` or unsupported method returns a clean `400 Bad Request`:**
+```bash
+curl -X POST "http://localhost:8080/api/payments/pay-now" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "ORD-102",
+    "amount": 150.0,
+    "currency": "USD",
+    "paymentMethod": "CRYPTO",
+    "customerEmail": "buyer@example.com"
+  }'
+```
+
+```text
+Payment Error: Payment method 'CRYPTO' is unavailable or failed: ...
+```
+
+---
+
 ## Handwritten & Study Notes
 
 Add your handwritten notes (PDFs, images, or Markdown summaries) inside a `notes/` folder and link them below:
@@ -171,7 +269,7 @@ Add your handwritten notes (PDFs, images, or Markdown summaries) inside a `notes
 | :--- | :--- | :--- |
 | **Creational Patterns Overview** | `notes/creational-patterns-overview.pdf` *(add file)* | Why object creation needs abstraction in Spring Boot |
 | **Singleton Pattern** | `notes/singleton-pattern.pdf` *(add file)* | Eager vs. Lazy, DCL (`volatile`), Bill Pugh Holder, Enum Singleton, Spring `@Scope("singleton")` |
-| **Factory Method vs. Abstract Factory** | `notes/factory-patterns.pdf` *(add file)* | Single product vs. product family |
+| **Factory Method vs. Abstract Factory** | `notes/factory-patterns.pdf` *(add file)* | Single product vs. product family, Spring bean lookup (`ApplicationContext` / `Map<String, T>`) |
 | **Builder & Prototype** | `notes/builder-prototype.pdf` *(add file)* | Fluent construction vs. cloning |
 
 ---
@@ -179,7 +277,7 @@ Add your handwritten notes (PDFs, images, or Markdown summaries) inside a `notes
 ## Contributing & Roadmap
 
 - [x] **Singleton Pattern** (`singleton-pattern/payment-singleton-demo`)
-- [ ] **Factory Method Pattern**
+- [x] **Factory Method Pattern** (`factory-method-pattern/payment-service`)
 - [ ] **Abstract Factory Pattern**
 - [ ] **Builder Pattern**
 - [ ] **Prototype Pattern**
