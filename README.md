@@ -16,6 +16,9 @@ A beginner-friendly, runnable collection of **Creational Design Patterns impleme
 - [2. Factory Method Pattern (`payment-service`)](#2-factory-method-pattern-payment-service)
   - [How to Run](#how-to-run-1)
   - [API Endpoints & Expected Output](#api-endpoints--expected-output-1)
+- [3. Abstract Factory Pattern (`payment-billing`)](#3-abstract-factory-pattern-payment-billing)
+  - [How to Run](#how-to-run-2)
+  - [API Endpoints & Expected Output](#api-endpoints--expected-output-2)
 - [Handwritten & Study Notes](#handwritten--study-notes)
 - [Contributing & Roadmap](#contributing--roadmap)
 
@@ -31,6 +34,8 @@ spring-boot-creational-design-patterns/
 │   └── payment-singleton-demo/     # Java 21 + Spring Boot 4.2.0 (Naive vs. DCL vs. Bill Pugh Singleton)
 ├── factory-method-pattern/
 │   └── payment-service/            # Java 21 + Spring Boot 4.2.0 (Naive tight coupling vs. Factory + @Lazy)
+├── abstract-factory-pattern/
+│   └── payment-billing/            # Java 21 + Spring Boot 4.2.0 (Regional Billing Families: INDIA vs. USA)
 ├── notes/                          # (Coming soon) Handwritten & study notes
 ├── .gitignore
 └── README.md
@@ -46,7 +51,7 @@ Creational patterns abstract the **object creation process** so your Spring Boot
 | :--- | :--- | :--- | :--- | :--- |
 | **Singleton** | Ensure a class has **only one shared instance** with a global access point | Expensive shared resources (e.g., connection clients, caches, config registries); also Spring's default `@Bean` scope | Focuses on **single instance reuse** across threads | [Implemented](./singleton-pattern/payment-singleton-demo) |
 | **Factory Method** | Define an interface for creating an object, letting **subclasses/implementations decide** which class to instantiate | Selecting a single service implementation dynamically (e.g., Stripe vs. PayPal payment processor, Email vs. SMS notifier) | Creates **one product** via a factory method / Spring bean lookup | [Implemented](./factory-method-pattern/payment-service) |
-| **Abstract Factory** | Create **families of related or dependent objects** without specifying concrete classes | Multi-provider or multi-theme setups (e.g., AWS vs. GCP storage + queue + secret clients) | Creates **a suite of related products** that must work together | Planned |
+| **Abstract Factory** | Create **families of related or dependent objects** without specifying concrete classes | Multi-provider or multi-region setups (e.g., India GST + Razorpay + e-Invoice vs. US Sales Tax + Stripe + US Receipt) | Creates **a suite of related products** that must work together | [Implemented](./abstract-factory-pattern/payment-billing) |
 | **Builder** | Construct **complex objects step by step**, separating construction from representation | Requests/DTOs/configs with many optional fields (e.g., complex order, report, or HTTP client configuration) | Focuses on **step-by-step assembly** of one complex object | Planned |
 | **Prototype** | Create new objects by **cloning an existing instance** rather than constructing from scratch | Expensive initialization where new independent copies are needed per request (e.g., document templates, rule snapshots) | Creates **copies of a pre-built object** (`@Scope("prototype")` or `.clone()`) | Planned |
 
@@ -193,7 +198,7 @@ cd factory-method-pattern/payment-service
 .\mvnw.cmd spring-boot:run
 ```
 
-The application starts on `http://localhost:8080`. *(Stop the singleton demo first if it is already using port `8080`.)*
+The application starts on `http://localhost:8080`. *(Stop any other demo first if it is already using port `8080`.)*
 
 ### API Endpoints & Expected Output
 
@@ -261,6 +266,118 @@ Payment Error: Payment method 'CRYPTO' is unavailable or failed: ...
 
 ---
 
+## 3. Abstract Factory Pattern (`payment-billing`)
+
+Located in [`abstract-factory-pattern/payment-billing`](./abstract-factory-pattern/payment-billing), this Spring Boot application shows how **Abstract Factory creates matching families of related objects** (`TaxCalculator`, `PaymentGateway`, `InvoiceGenerator`) per `Region` (`INDIA` or `USA`):
+
+- **`IndiaBillingFactory` (`@Component("INDIA")`)**: Produces `IndiaGstCalculator` (18% GST: 9% CGST + 9% SGST) + `RazorpayPaymentGateway` (`INR`) + `IndiaGstInvoiceGenerator` (`INV-IN-...`, Govt e-Invoice GSTIN/IRN).
+- **`UsaBillingFactory` (`@Component("USA")`)**: Produces `UsSalesTaxCalculator` (8.25% California Sales Tax) + `StripePaymentGateway` (`USD`) + `UsReceiptGenerator` (`REC-US-...`, US IRS commercial receipt).
+- **`BillingFactoryProvider`**: Injects `Map<String, RegionalBillingFactory>` from Spring and resolves the entire regional family cleanly by `region.name()`.
+- **Anti-Pattern Comparison (`processWithoutFactory`)**: Directly instantiates `new RazorpayPaymentGateway()` (`INR`) alongside `new UsSalesTaxCalculator()` and `new UsReceiptGenerator()`, illustrating the real bug Abstract Factory prevents—mixing incompatible components from different regions.
+
+### How to Run
+
+From the repository root:
+
+```bash
+cd abstract-factory-pattern/payment-billing
+```
+
+**On Linux / macOS:**
+```bash
+./mvnw spring-boot:run
+```
+
+**On Windows (PowerShell / CMD):**
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+The application starts on `http://localhost:8080`. *(Stop any other demo first if it is already using port `8080`.)*
+
+### API Endpoints & Expected Output
+
+Base path: `/api/billing`
+
+#### 1. Clean Abstract Factory Endpoint
+**Endpoint:** `POST /api/billing/pay-now`
+
+**Example A — `INDIA` Region (`200 OK`):**
+```bash
+curl -X POST "http://localhost:8080/api/billing/pay-now" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "ORD-501",
+    "customerId": "CUST-01",
+    "amount": 1000.0,
+    "region": "INDIA"
+  }'
+```
+
+```json
+{
+  "orderId": "ORD-501",
+  "region": "INDIA",
+  "currency": "INR",
+  "baseAmount": 1000.0,
+  "taxAmount": 180.0,
+  "taxBreakdown": "Indian GST 18% (CGST: ₹90.00, SGST: ₹90.00)",
+  "totalAmountPaid": 1180.0,
+  "paymentTransactionId": "pay_rzp_1732590000000",
+  "paymentGateway": "Razorpay (India UPI/Netbanking/Cards)",
+  "invoiceNumber": "INV-IN-ORD-501",
+  "invoiceLegalDetails": "Govt e-Invoice Compliant | GSTIN: 27AABCT3518Q1ZV | IRN: ... | Signed QR: Generated",
+  "complianceStatus": "100% COMPLIANT - ALL REGIONAL COMPONENTS MATCHED"
+}
+```
+
+**Example B — `USA` Region (`200 OK`):**
+```bash
+curl -X POST "http://localhost:8080/api/billing/pay-now" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "ORD-502",
+    "customerId": "CUST-02",
+    "amount": 100.0,
+    "region": "USA"
+  }'
+```
+
+```json
+{
+  "orderId": "ORD-502",
+  "region": "USA",
+  "currency": "USD",
+  "baseAmount": 100.0,
+  "taxAmount": 8.25,
+  "taxBreakdown": "California Sales Tax 8.25% ($8.25)",
+  "totalAmountPaid": 108.25,
+  "paymentTransactionId": "ch_stripe_1732590000000",
+  "paymentGateway": "Stripe (US ACH/Credit Cards)",
+  "invoiceNumber": "REC-US-ORD-502",
+  "invoiceLegalDetails": "US IRS Standard Commercial Receipt | Merchant EIN: 12-3456789 | Sales Tax collected under CA Reg #9876543",
+  "complianceStatus": "100% COMPLIANT - ALL REGIONAL COMPONENTS MATCHED"
+}
+```
+
+#### 2. No-Pattern Endpoint (Mismatched Regional Components)
+**Endpoint:** `POST /api/billing/noPattern/pay-now`
+
+```bash
+curl -X POST "http://localhost:8080/api/billing/noPattern/pay-now" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "orderId": "ORD-503",
+    "customerId": "CUST-03",
+    "amount": 100.0,
+    "region": "INDIA"
+  }'
+```
+
+**Expected Output:** Charges via `Razorpay` (`INR`) while applying `California Sales Tax 8.25%` and issuing `REC-US-ORD-503`, returning `"complianceStatus": "NON-COMPLIANT: TAX & INVOICE REGION MISMATCH DETECTED!"`.
+
+---
+
 ## Handwritten & Study Notes
 
 Add your handwritten notes (PDFs, images, or Markdown summaries) inside a `notes/` folder and link them below:
@@ -278,7 +395,7 @@ Add your handwritten notes (PDFs, images, or Markdown summaries) inside a `notes
 
 - [x] **Singleton Pattern** (`singleton-pattern/payment-singleton-demo`)
 - [x] **Factory Method Pattern** (`factory-method-pattern/payment-service`)
-- [ ] **Abstract Factory Pattern**
+- [x] **Abstract Factory Pattern** (`abstract-factory-pattern/payment-billing`)
 - [ ] **Builder Pattern**
 - [ ] **Prototype Pattern**
 - [ ] **Handwritten & Study Notes**
