@@ -8,6 +8,7 @@ A beginner-friendly, runnable collection of **Creational Design Patterns impleme
 
 ## Table of Contents
 
+- [Quick Start (Clone & Run)](#quick-start-clone--run)
 - [Repository Structure](#repository-structure)
 - [Creational Design Patterns Comparison](#creational-design-patterns-comparison)
 - [1. Singleton Pattern (`payment-singleton-demo`)](#1-singleton-pattern-payment-singleton-demo)
@@ -24,6 +25,30 @@ A beginner-friendly, runnable collection of **Creational Design Patterns impleme
   - [API Endpoints & Expected Output](#api-endpoints--expected-output-3)
 - [Handwritten & Study Notes](#handwritten--study-notes)
 - [Contributing & Roadmap](#contributing--roadmap)
+
+---
+
+## Quick Start (Clone & Run)
+
+Each pattern in this repository is a **standalone Spring Boot application** (Java 21 + Maven Wrapper included — no separate Maven installation needed).
+
+### Step 1: Clone the repository
+```bash
+git clone https://github.com/appu1204/spring-boot-creational-design-patterns.git
+cd spring-boot-creational-design-patterns
+```
+
+### Step 2: Run any pattern app
+Choose **one** pattern below and run it in your terminal (or open its `*Application.java` file in IntelliJ IDEA / VS Code and click **Run**):
+
+| Pattern | App Folder | Windows (`PowerShell` / `CMD`) | Linux / macOS | Main Class |
+| :--- | :--- | :--- | :--- | :--- |
+| **Singleton** | [`payment-singleton-demo`](./singleton-pattern/payment-singleton-demo) | `cd singleton-pattern\payment-singleton-demo`<br>`.\mvnw.cmd spring-boot:run` | `cd singleton-pattern/payment-singleton-demo && ./mvnw spring-boot:run` | [`PaymentSingletonDemoApplication.java`](./singleton-pattern/payment-singleton-demo/src/main/java/com/finpay/demo/PaymentSingletonDemoApplication.java) |
+| **Factory Method** | [`payment-service`](./factory-method-pattern/payment-service) | `cd factory-method-pattern\payment-service`<br>`.\mvnw.cmd spring-boot:run` | `cd factory-method-pattern/payment-service && ./mvnw spring-boot:run` | [`PaymentServiceApplication.java`](./factory-method-pattern/payment-service/src/main/java/com/merchant/payment_service/PaymentServiceApplication.java) |
+| **Abstract Factory** | [`payment-billing`](./abstract-factory-pattern/payment-billing) | `cd abstract-factory-pattern\payment-billing`<br>`.\mvnw.cmd spring-boot:run` | `cd abstract-factory-pattern/payment-billing && ./mvnw spring-boot:run` | [`PaymentBillingApplication.java`](./abstract-factory-pattern/payment-billing/src/main/java/com/ecommerce/payment_billing/PaymentBillingApplication.java) |
+| **Prototype** | [`fintech-billing-engine`](./prototype-pattern/fintech-billing-engine) | `cd prototype-pattern\fintech-billing-engine`<br>`.\mvnw.cmd spring-boot:run` | `cd prototype-pattern/fintech-billing-engine && ./mvnw spring-boot:run` | [`FintechBillingEngineApplication.java`](./prototype-pattern/fintech-billing-engine/src/main/java/com/fintech/billing/FintechBillingEngineApplication.java) |
+
+> **Tip:** All apps start on `http://localhost:8080`. Stop the currently running app (`Ctrl + C`) before starting another one.
 
 ---
 
@@ -77,7 +102,7 @@ Located in [`singleton-pattern/payment-singleton-demo`](./singleton-pattern/paym
 
 ### How to Run
 
-From the repository root:
+Open a terminal inside the cloned `spring-boot-creational-design-patterns` folder and navigate to this app:
 
 ```bash
 cd singleton-pattern/payment-singleton-demo
@@ -187,7 +212,7 @@ Located in [`factory-method-pattern/payment-service`](./factory-method-pattern/p
 
 ### How to Run
 
-From the repository root:
+Open a terminal inside the cloned `spring-boot-creational-design-patterns` folder and navigate to this app:
 
 ```bash
 cd factory-method-pattern/payment-service
@@ -282,7 +307,7 @@ Located in [`abstract-factory-pattern/payment-billing`](./abstract-factory-patte
 
 ### How to Run
 
-From the repository root:
+Open a terminal inside the cloned `spring-boot-creational-design-patterns` folder and navigate to this app:
 
 ```bash
 cd abstract-factory-pattern/payment-billing
@@ -392,7 +417,7 @@ Located in [`prototype-pattern/fintech-billing-engine`](./prototype-pattern/fint
 
 ### How to Run
 
-From the repository root:
+Open a terminal inside the cloned `spring-boot-creational-design-patterns` folder and navigate to this app:
 
 ```bash
 cd prototype-pattern/fintech-billing-engine
