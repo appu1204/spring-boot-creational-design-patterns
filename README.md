@@ -19,6 +19,9 @@ A beginner-friendly, runnable collection of **Creational Design Patterns impleme
 - [3. Abstract Factory Pattern (`payment-billing`)](#3-abstract-factory-pattern-payment-billing)
   - [How to Run](#how-to-run-2)
   - [API Endpoints & Expected Output](#api-endpoints--expected-output-2)
+- [4. Prototype Pattern (`fintech-billing-engine`)](#4-prototype-pattern-fintech-billing-engine)
+  - [How to Run](#how-to-run-3)
+  - [API Endpoints & Expected Output](#api-endpoints--expected-output-3)
 - [Handwritten & Study Notes](#handwritten--study-notes)
 - [Contributing & Roadmap](#contributing--roadmap)
 
@@ -36,6 +39,8 @@ spring-boot-creational-design-patterns/
 │   └── payment-service/            # Java 21 + Spring Boot 4.2.0 (Naive tight coupling vs. Factory + @Lazy)
 ├── abstract-factory-pattern/
 │   └── payment-billing/            # Java 21 + Spring Boot 4.2.0 (Regional Billing Families: INDIA vs. USA)
+├── prototype-pattern/
+│   └── fintech-billing-engine/     # Java 21 + Spring Boot 4.2.0 (Deep-Copy Prototype Registry vs. Scratch Init)
 ├── notes/                          # (Coming soon) Handwritten & study notes
 ├── .gitignore
 └── README.md
@@ -53,7 +58,7 @@ Creational patterns abstract the **object creation process** so your Spring Boot
 | **Factory Method** | Define an interface for creating an object, letting **subclasses/implementations decide** which class to instantiate | Selecting a single service implementation dynamically (e.g., Stripe vs. PayPal payment processor, Email vs. SMS notifier) | Creates **one product** via a factory method / Spring bean lookup | [Implemented](./factory-method-pattern/payment-service) |
 | **Abstract Factory** | Create **families of related or dependent objects** without specifying concrete classes | Multi-provider or multi-region setups (e.g., India GST + Razorpay + e-Invoice vs. US Sales Tax + Stripe + US Receipt) | Creates **a suite of related products** that must work together | [Implemented](./abstract-factory-pattern/payment-billing) |
 | **Builder** | Construct **complex objects step by step**, separating construction from representation | Requests/DTOs/configs with many optional fields (e.g., complex order, report, or HTTP client configuration) | Focuses on **step-by-step assembly** of one complex object | Planned |
-| **Prototype** | Create new objects by **cloning an existing instance** rather than constructing from scratch | Expensive initialization where new independent copies are needed per request (e.g., document templates, rule snapshots) | Creates **copies of a pre-built object** (`@Scope("prototype")` or `.clone()`) | Planned |
+| **Prototype** | Create new objects by **cloning an existing instance** rather than constructing from scratch | Expensive initialization where new independent copies are needed per request (e.g., invoice templates, rule snapshots) | Creates **copies of a pre-built object** (copy constructor / `@Scope("prototype")`) | [Implemented](./prototype-pattern/fintech-billing-engine) |
 
 ---
 
@@ -378,6 +383,109 @@ curl -X POST "http://localhost:8080/api/billing/noPattern/pay-now" \
 
 ---
 
+## 4. Prototype Pattern (`fintech-billing-engine`)
+
+Located in [`prototype-pattern/fintech-billing-engine`](./prototype-pattern/fintech-billing-engine), this Spring Boot application simulates generating invoices backed by **expensive external lookups** (`~1000 ms` total: `300 ms` Vault tax profile + `400 ms` Bank Forex API + `300 ms` Core Banking DB):
+
+- **Naive (`NaiveInvoiceService`)** — Re-fetches tax profile, forex rates, and bank routing details from scratch on **every** invoice request (`~1000 ms` per request).
+- **Prototype Registry (`InvoicePrototypeRegistry` + `InvoiceTemplate`)** — Pre-loads the master `InvoiceTemplate` for `"MERCHANT_ACME_CORP"` once at startup (`@PostConstruct`) and returns independent **deep-copied** instances via a copy constructor (`new InvoiceTemplate(master)` / `clone()`), cutting invoice generation down to `~0 ms` while isolating mutable nested objects (`MerchantTaxProfile`, `BankRoutingDetails`, `forexRates`).
+
+### How to Run
+
+From the repository root:
+
+```bash
+cd prototype-pattern/fintech-billing-engine
+```
+
+**On Linux / macOS:**
+```bash
+./mvnw spring-boot:run
+```
+
+**On Windows (PowerShell / CMD):**
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+The application starts on `http://localhost:8080`. *(Stop any other demo first if it is already using port `8080`.)*
+
+### API Endpoints & Expected Output
+
+Base path: `/api/fintech/billing`
+
+*(Registered merchant ID in `InvoicePrototypeRegistry`: `"MERCHANT_ACME_CORP"`.)*
+
+#### 1. Without Prototype (Naive — Reconstructed from Scratch)
+**Endpoint:** `POST /api/fintech/billing/naive`
+
+```bash
+curl -X POST "http://localhost:8080/api/fintech/billing/naive" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "merchantId": "MERCHANT_ACME_CORP",
+    "clientName": "Aarav Sharma",
+    "clientCompany": "FinTech Labs",
+    "clientEmail": "billing@fintechlabs.io",
+    "invoiceDescription": "Annual Cloud Subscription",
+    "amount": 100.0,
+    "currency": "USD"
+  }'
+```
+
+**Example Response (`executionTimeMs` is `~1000 ms` on every call):**
+```json
+{
+  "invoiceNumber": "INV-A1B2C3D4",
+  "merchantName": "Acme Cloud Corporation",
+  "clientName": "Aarav Sharma (FinTech Labs)",
+  "billingAmount": 100.0,
+  "currency": "USD",
+  "forexConvertedAmount": "INR 8300.00 (Rate: 83.0)",
+  "taxRegistrationNumber": "VAT-US-9988221",
+  "paymentWireRouting": "Bank: JPMorgan Chase NY | SWIFT: CHASUS33XXX | IBAN: US893704004405112",
+  "legalTerms": "Net 30 days payment term. | Subject to Delaware corporate financial arbitration. | Authorized e-signature certificate #99281-HSM",
+  "executionTimeMs": 1005,
+  "strategyUsed": "WITHOUT_PROTOTYPE (Reconstructed from scratch)"
+}
+```
+
+#### 2. With Prototype (Cloned from In-Memory Master)
+**Endpoint:** `POST /api/fintech/billing/prototype`
+
+```bash
+curl -X POST "http://localhost:8080/api/fintech/billing/prototype" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "merchantId": "MERCHANT_ACME_CORP",
+    "clientName": "Aarav Sharma",
+    "clientCompany": "FinTech Labs",
+    "clientEmail": "billing@fintechlabs.io",
+    "invoiceDescription": "Annual Cloud Subscription",
+    "amount": 100.0,
+    "currency": "USD"
+  }'
+```
+
+**Example Response (`executionTimeMs` drops to `~0 ms`):**
+```json
+{
+  "invoiceNumber": "INV-E5F6G7H8",
+  "merchantName": "Acme Cloud Corporation",
+  "clientName": "Aarav Sharma (FinTech Labs)",
+  "billingAmount": 100.0,
+  "currency": "USD",
+  "forexConvertedAmount": "INR 8300.00 (Rate: 83.0)",
+  "taxRegistrationNumber": "VAT-US-9988221",
+  "paymentWireRouting": "Bank: JPMorgan Chase NY | SWIFT: CHASUS33XXX | IBAN: US893704004405112",
+  "legalTerms": "Net 30 days payment term. | Subject to Delaware corporate financial arbitration. | Authorized e-signature certificate #99281-HSM",
+  "executionTimeMs": 0,
+  "strategyUsed": "WITH_PROTOTYPE (Cloned from In-Memory Master)"
+}
+```
+
+---
+
 ## Handwritten & Study Notes
 
 Add your handwritten notes (PDFs, images, or Markdown summaries) inside a `notes/` folder and link them below:
@@ -387,7 +495,7 @@ Add your handwritten notes (PDFs, images, or Markdown summaries) inside a `notes
 | **Creational Patterns Overview** | `notes/creational-patterns-overview.pdf` *(add file)* | Why object creation needs abstraction in Spring Boot |
 | **Singleton Pattern** | `notes/singleton-pattern.pdf` *(add file)* | Eager vs. Lazy, DCL (`volatile`), Bill Pugh Holder, Enum Singleton, Spring `@Scope("singleton")` |
 | **Factory Method vs. Abstract Factory** | `notes/factory-patterns.pdf` *(add file)* | Single product vs. product family, Spring bean lookup (`ApplicationContext` / `Map<String, T>`) |
-| **Builder & Prototype** | `notes/builder-prototype.pdf` *(add file)* | Fluent construction vs. cloning |
+| **Builder & Prototype** | `notes/builder-prototype.pdf` *(add file)* | Fluent construction vs. deep-copy cloning |
 
 ---
 
@@ -397,5 +505,5 @@ Add your handwritten notes (PDFs, images, or Markdown summaries) inside a `notes
 - [x] **Factory Method Pattern** (`factory-method-pattern/payment-service`)
 - [x] **Abstract Factory Pattern** (`abstract-factory-pattern/payment-billing`)
 - [ ] **Builder Pattern**
-- [ ] **Prototype Pattern**
+- [x] **Prototype Pattern** (`prototype-pattern/fintech-billing-engine`)
 - [ ] **Handwritten & Study Notes**
